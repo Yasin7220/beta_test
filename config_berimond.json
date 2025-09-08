@@ -1,0 +1,15 @@
+{
+    "N_COMANDANTES": 1,
+    "T1_MIN": 0,
+    "T1_SEC": 0,
+    "T2_MIN": 0,
+    "T2_SEC": 0,
+    "RECRUIT_MIN": 0,
+    "RECRUIT_SEC": 0,
+    "ROUNDS_BEFORE_SEND": 1,
+    "HORSE_CHOICE": "plumas",
+    "SELECTED_RECRUIT_TROOP": "",
+    "SELECTED_SEND_TROOP": "",
+    "PARAPETS_COUNT": 5,
+    "THEME": "solar"
+}
