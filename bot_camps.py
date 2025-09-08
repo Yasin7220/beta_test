@@ -488,6 +488,7 @@ def load_templates():
         "offer2": "assets/popups/offer2.png",
         "offer3": "assets/popups/offer3.png",
         "offer4": "assets/popups/offer4.png",
+        "reward2": "assets/popups/reward2.png",
     }
 
     for key, path in offer_paths.items():
@@ -1185,15 +1186,18 @@ def attack_berimond():
     else:
         log("⚠️ No se encontró coordenada para el caballo elegido")
         return False
-    t.sleep(0.1)
 
     # Confirmar ataque con wait_and_click
     if not wait_and_click("assets/attack/confirm_attack2.png", confidence=0.85, timeout=2):
         log("❌ No se encontró el botón de confirmar ataque")
         return False
-    t.sleep(0.01)
 
     elapsed = t.time() - start_time
+    
+    if elapsed < 4.01:
+        t.sleep(4.01 - elapsed)
+        elapsed = t.time() - start_time
+        
     log(f"✅ Ataque completado con caballo {horse_choice} en {elapsed:.2f} segundos")
     return True
 
@@ -1279,23 +1283,12 @@ def send_troops_to_berimond_kingdom(troop_name: str):
         log(f"❌ Error en send_troops_to_berimond_kingdom: {e}")
         return False
 
-
-def is_midnight_pause():
-    """Devuelve True si la hora en España está entre 23:59 y 00:01."""
-    now = datetime.now(ZoneInfo("Europe/Madrid")).time()
-    return time(23, 59) <= now or now <= time(0, 1)
-
-PAUSE_WINDOWS = [(time(h, 29), time(h, 31)) for h in range(24)]
+PAUSE_WINDOWS = [(time(h, 59), time(h, 1)) for h in range(24)]
 
 def is_in_pause_window():
     """Devuelve True si la hora actual está en cualquier ventana horaria o en la pausa de medianoche."""
     now = datetime.now(ZoneInfo("Europe/Madrid")).time()
-    
-    # Pausa de medianoche
-    if time(23, 59) <= now or now <= time(0, 1):
-        return True
-    
-    # Pausa horaria
+
     for start, end in PAUSE_WINDOWS:
         if start <= now <= end:
             return True
@@ -1305,10 +1298,10 @@ def is_in_pause_window():
 def berimond_cycle():
     global ATTACK_ACTIVE
     round_count = 0
-    last_recruit_time = t.time()  # ⏱ usamos t (import time as t)
+    last_recruit_time = t.time()
 
     while ATTACK_ACTIVE:
-        # --- Pausa automática ---
+        # --- Pausa automática antes de la ronda ---
         if is_in_pause_window():
             log("⏸️ Pausa automática iniciada")
             while is_in_pause_window() and ATTACK_ACTIVE:
@@ -1319,22 +1312,31 @@ def berimond_cycle():
         log(f"▶️ Iniciando ronda {round_count}")
 
         # 1. Lanzar ataques
+        attacks_skipped = False
         for i in range(N_COMANDANTES):
-            if not ATTACK_ACTIVE: 
+            if not ATTACK_ACTIVE:
                 break
+
+            if is_in_pause_window():
+                log(f"⏸️ Pausa iniciada durante ataques, saltando ataques restantes...")
+                attacks_skipped = True
+                break  # Salimos del bucle de ataques
+
             attack_berimond()
             t.sleep(0.5)
+
+        if attacks_skipped:
+            log("⚠️ Algunos ataques fueron omitidos debido a la pausa")
 
         # 2. Esperar duración T2
         log(f"⏳ Esperando llegada (T1={USER_T1}s, T2={USER_T2}s)")
         start_wait = t.time()
         while ATTACK_ACTIVE and t.time() - start_wait < USER_T2:
             if is_in_pause_window():
-                log("⏸️ Pausa detectada durante espera, pausando temporalmente...")
+                log("⏸️ Pausa activa durante T2, esperando...")
                 while is_in_pause_window() and ATTACK_ACTIVE:
                     t.sleep(5)
                 log("✅ Fin de pausa, reanudando espera...")
-                start_wait += 5  # compensar tiempo de pausa
             t.sleep(1)
 
         # 3. Enviar tropas si toca
@@ -1352,17 +1354,6 @@ def berimond_cycle():
 
 
 def launch_main_window_berimond(parent=None):
-    """
-    Launcher migrado a ttkbootstrap (Toplevel).
-    Contiene:
-      - Selector de N_COMANDANTES
-      - Sección Ciclo Berimond (T1/T2/rondas/reclutamiento/slots + Iniciar/Detener)
-      - Selección de caballo (monedas/plumas)
-      - Reclutamiento (lista tropas + imagen + slots)
-      - Envío a Berimond (combo + imagen + botón)
-      - Log y guardar/cargar configuración (CONFIG_FILEB)
-      - Hotkey 'x' para detener
-    """
     global root, spin_comandantes, text_log, label_status
     global ATTACK_ACTIVE
     global spin_t1, spin_t2, spin_rounds, spin_recruit, spin_slots
@@ -1758,7 +1749,7 @@ def launch_main_window_berimond(parent=None):
                 t.sleep(0.5)
 
     threading.Thread(target=monitor_hotkey, daemon=True).start()
-
+    threading.Thread(target=watcher_popups_templates, daemon=True).start()
     # -------------------------
     # Al cerrar, guardar config y detener hilos
     # -------------------------
@@ -2110,7 +2101,7 @@ def watcher_popups_templates():
     while WATCHER_ACTIVE:
         screenshot = pyautogui.screenshot()
         screen_gray = cv2.cvtColor(np.array(screenshot), cv2.COLOR_RGB2GRAY)
-        current_time = time.time()
+        current_time = t.time()
 
         popup_found = False
 
@@ -2141,7 +2132,7 @@ def watcher_popups_templates():
             if current_time - last_popup_time > POPUP_GRACE:
                 POPUP_ACTIVE = False
 
-        time.sleep(0.1)
+        t.sleep(0.1)
 
 
 def is_cooldown_locked(camp_id):
