@@ -9,14 +9,13 @@ from typing import List, Optional
 import json
 import os
 from PIL import Image, ImageTk
-import subprocess, sys
 import shutil
 import keyboard
 from datetime import datetime, time
 from zoneinfo import ZoneInfo
 import ttkbootstrap as ttk
 from ttkbootstrap.widgets import Spinbox
-from tkinter import StringVar, IntVar
+from tkinter import StringVar
 import time as t  
 from datetime import datetime, time 
 # ---------- Config ----------
@@ -52,10 +51,10 @@ TIMER = 10
 POPUP_ACTIVE = False
 COOLDOWN_LOCKS = {}
 camps_detected: List[Detection] = []
-# templates
 templates = {}
 offer_templates = {}
 comandante_delays = {}
+disabled_popups = set()
 horse_choice = "monedas"  # por defecto
 # GUI references
 root = None
@@ -539,7 +538,6 @@ def actualizar_combo_comandante(*args):
         combo_comandante.current(0)
         actualizar_entry_delay()
 
-
 def actualizar_entry_delay(*args):
     idx = combo_comandante.current()
     if idx < 0:
@@ -563,7 +561,6 @@ def save_config():
         load_config()
     except Exception as e:
         print(f"⚠️ Error guardando configuración: {e}")
-
 
 def load_config():
     if os.path.exists(CONFIG_FILE):
@@ -715,7 +712,6 @@ def calcular_max_ciclos(n_30, n_1h, n_comandantes, bonus_activo):
     else:
         return min(n_30, n_1h) // n_comandantes
 
-
 def log(msg):
     global text_log
     try:
@@ -726,7 +722,7 @@ def log(msg):
     except Exception:
         print(msg)
 
-def click_image(image_path, confidence=0.85, timeout=4, offset_x=0):
+def click_image(image_path, confidence=0.95, timeout=4, offset_x=0):
     start = time.time()
     while time.time() - start < timeout:
         try:
@@ -740,7 +736,7 @@ def click_image(image_path, confidence=0.85, timeout=4, offset_x=0):
         time.sleep(0.1)
     return False
 
-def wait_and_click(image_path, confidence=0.85, timeout=3, offset_x=0, offset_y=0):
+def wait_and_click(image_path, confidence=0.95, timeout=3, offset_x=0, offset_y=0):
     start = t.time()
     templ = cv2.imread(image_path, cv2.IMREAD_GRAYSCALE)
     if templ is None:
@@ -748,11 +744,6 @@ def wait_and_click(image_path, confidence=0.85, timeout=3, offset_x=0, offset_y=
         return False
 
     while t.time() - start < timeout:
-        # ⏸️ Esperar si hay popup activo
-        while POPUP_ACTIVE:
-            log("⚠️ Popup activo, esperando a que se cierre...")
-            time.sleep(0.3)
-
         screen = pyautogui.screenshot()
         screen_gray = cv2.cvtColor(np.array(screen), cv2.COLOR_RGB2GRAY)
         res = cv2.matchTemplate(screen_gray, templ, cv2.TM_CCOEFF_NORMED)
@@ -767,7 +758,6 @@ def wait_and_click(image_path, confidence=0.85, timeout=3, offset_x=0, offset_y=
 
         t.sleep(0.08)
     return False
-
 
 def safe_attack_click():
     ok = wait_and_click("assets/attack_icon.png", confidence=0.8, timeout=0.25)
@@ -1070,7 +1060,6 @@ def wait_for_recruit_button(image_path, timeout=10):
         t.sleep(0.2)
     return None
 
-
 def recruit_troops(subtipo):
     tipo_general = TROOP_TYPES.get(subtipo)
     imagen = TROOP_IMAGES.get(subtipo)
@@ -1133,81 +1122,92 @@ def recruit_troops(subtipo):
     except Exception as e:
         log(f"❌ Error en reclutamiento: {e}")
 
-
 def click_coord(coord: dict):
     x, y = coord["x"], coord["y"]
     pyautogui.moveTo(x, y, duration=0.05)
     pyautogui.click()
 
-
 def attack_berimond():
-    global horse_choice
+    global horse_choice, POPUP_ACTIVE, disabled_popups
+    start_time = t.time()
+    POPUP_ACTIVE = False
 
-    start_time = t.time()  # ⏱ medir duración total
+    disabled_popups.add("beri_reward")
 
-    # Click en campamento (centro de pantalla)
-    screen_width, screen_height = pyautogui.size()
-    pyautogui.moveTo(screen_width//2, screen_height//2, duration=0.05)
-    pyautogui.click()
-    t.sleep(0.2)
+    try:
+        # --- Click en campamento (centro de pantalla) ---
+        screen_width, screen_height = pyautogui.size()
+        pyautogui.moveTo(screen_width//2, screen_height//2, duration=0.05)
+        pyautogui.click()
+        t.sleep(0.2)
 
-    # --- Pre-attack steps con click_coord ---
-    if "attack_icon" in COORDS:
-        click_coord(COORDS["attack_icon"])
-        t.sleep(0.3)
+        # --- Secuencia básica de ataque usando COORDS ---
+        if "attack_icon" in COORDS:
+            click_coord(COORDS["attack_icon"])
+            t.sleep(0.3)
 
-    if "confirm_attack" in COORDS:
-        click_coord(COORDS["confirm_attack"])
-        t.sleep(0.5)
+        if "confirm_attack" in COORDS:
+            click_coord(COORDS["confirm_attack"])
+            t.sleep(0.5)
 
-    if "template_button" in COORDS:
-        click_coord(COORDS["template_button"])
-        # sin sleep
+        if "template_button" in COORDS:
+            click_coord(COORDS["template_button"])
 
-    if "attack_button" in COORDS:
-        click_coord(COORDS["attack_button"])
-        t.sleep(0.3)
+        if "attack_button" in COORDS:
+            click_coord(COORDS["attack_button"])
+            t.sleep(0.3)
 
-    # Detectar min_troops
-    if detect_popup("assets/attack/min_troops.png", confidence=0.8, timeout=0.5):
-        log("❌ Error: No hay suficientes tropas para atacar")
-        wait_and_click("assets/attack/error_close.png")
-        wait_and_click("assets/attack/exit2.png")
-        return False
-
-    # --- Selección del caballo con wait_and_click ---
-    if horse_choice == "monedas":
-        if not wait_and_click("assets/attack/horse_gold_coins.png", confidence=0.85, timeout=2):
-            log("❌ No se encontró el caballo de monedas")
+        # --- Popup de tropas mínimas ---
+        if detect_popup("assets/attack/min_troops.png", confidence=0.8, timeout=0.5):
+            log("❌ Error: No hay suficientes tropas para atacar")
+            wait_and_click("assets/attack/error_close.png")
+            wait_and_click("assets/attack/exit2.png")
             return False
-    elif horse_choice == "plumas":
-        if not wait_and_click("assets/attack/horse_premium.png", confidence=0.85, timeout=2):
-            log("❌ No se encontró el caballo premium")
+
+        # --- Selección del caballo por COORDS ---
+        if horse_choice == "monedas":
+            if "horse_gold_coins" in COORDS:
+                click_coord(COORDS["horse_gold_coins"])
+                t.sleep(0.2)
+            else:
+                log("❌ Coordenadas de caballo monedas no encontradas en COORDS")
+                return False
+        elif horse_choice == "plumas":
+            if "horse_premium" in COORDS:
+                click_coord(COORDS["horse_premium"])
+                t.sleep(0.2)
+            else:
+                log("❌ Coordenadas de caballo premium no encontradas en COORDS")
+                return False
+
+        # --- Confirmar ataque por COORDS ---
+        if "confirm_attack2" in COORDS:
+            click_coord(COORDS["confirm_attack2"])
+            t.sleep(0.2)
+        else:
+            log("❌ Coordenadas de confirm_attack2 no encontradas en COORDS")
             return False
-    else:
-        log("⚠️ No se encontró coordenada para el caballo elegido")
-        return False
 
-    # Confirmar ataque con wait_and_click
-    if not wait_and_click("assets/attack/confirm_attack2.png", confidence=0.85, timeout=2):
-        log("❌ No se encontró el botón de confirmar ataque")
-        return False
-
-    elapsed = t.time() - start_time
-    
-    if elapsed < 4.01:
-        t.sleep(4.01 - elapsed)
+        # Sincronización mínima
         elapsed = t.time() - start_time
-        
-    log(f"✅ Ataque completado con caballo {horse_choice} en {elapsed:.2f} segundos")
-    return True
+        if elapsed < 4.01:
+            t.sleep(4.01 - elapsed)
+            elapsed = t.time() - start_time
+
+        log(f"✅ Ataque completado con caballo {horse_choice} en {elapsed:.2f} segundos")
+        return True
+
+    finally:
+        # ✅ Rehabilitar reward_beri después del ataque
+        disabled_popups.discard("beri_reward")
+
+
 
 def click_with_offset(pos, offset_x=0, offset_y=0):
     """Click en la posición con offset."""
     import pyautogui
     x, y = pos
     pyautogui.click(x + offset_x, y + offset_y)
-
 
 def send_troops_to_berimond_kingdom(troop_name: str):
     try:
@@ -1261,7 +1261,6 @@ def send_troops_to_berimond_kingdom(troop_name: str):
             (base_path + "confirm.png", {"desc": "Confirmar selección de tropas"}),
             (base_path + "confirm_sending.png", {"desc": "Confirmar envío"}),
             (base_path + "reduce_icon.png", {"desc": "Abrir menú de relojes", "sleep": 0.5}),
-            # ⏰ Dos clics en clock_1h con offset +100 (como en cool_down_camp)
             (base_path + "clock_1h.png", {"desc": "Usar reloj de 1 hora", "offset_x": 100, "sleep": 0.3}),
             (base_path + "clock_1h.png", {"desc": "Usar reloj de 1 hora (2do clic)", "offset_x": 100, "sleep": 0.3}),
             (base_path + "enter_kingdom.png", {"desc": "Entrar al reino Berimond"}),
@@ -1353,7 +1352,6 @@ def berimond_cycle():
 
         log(f"✅ Ronda {round_count} completada")
 
-
 def launch_main_window_berimond(parent=None):
     global root, spin_comandantes, text_log, label_status
     global ATTACK_ACTIVE
@@ -1362,11 +1360,10 @@ def launch_main_window_berimond(parent=None):
     global USER_SELECTED_TROOP, USER_SLOTS, N_COMANDANTES, horse_choice, spin_parapets, cargar_config, load_config
 
     # -------------------------
-    # Crear Toplevel (no Tk)
+    # Crear Toplevel 
     # -------------------------
-    root = ttk.Toplevel()   # usa ttkbootstrap (tu archivo ya importó `import ttkbootstrap as ttk`)
+    root = ttk.Toplevel()
     root.title("Bot Berimond")
-    # optional: fija tamaño mínimo si quieres
     root.minsize(900, 600)
     if not hasattr(root, "style"):
         root.style = ttk.Style()
@@ -1390,7 +1387,6 @@ def launch_main_window_berimond(parent=None):
         except Exception as e:
             log(f"⚠️ No se pudo cambiar el tema: {e}")
 
-    # añadir todos los temas disponibles de ttkbootstrap
     for theme in root.style.theme_names():
         theme_menu.add_command(label=theme.capitalize(), command=lambda t=theme: change_theme(t))
     # -------------------------
@@ -1406,7 +1402,6 @@ def launch_main_window_berimond(parent=None):
 
     label_status = ttk.Label(top_frame, text="", font=("Segoe UI", 11))
     label_status.grid(row=0, column=2, padx=10)
-
     # -------------------------
     # Log
     # -------------------------
@@ -1429,8 +1424,6 @@ def launch_main_window_berimond(parent=None):
         print(msg)
 
     globals()['log'] = log_local
-
-
     # -------------------------
     # Caballo
     # -------------------------
@@ -1448,7 +1441,7 @@ def launch_main_window_berimond(parent=None):
         horse_choice = choice
         log(f"🐴 Seleccionado: Caballo {choice.capitalize()}")
     # -------------------------
-    # Ciclo Berimond (reemplaza relojes/delays antiguos)
+    # Ciclo Berimond
     # -------------------------
     cycle_frame = ttk.Labelframe(root, text="Ciclo Berimond", padding=10, bootstyle="primary")
     cycle_frame.grid(row=3, column=0, padx=10, pady=8, sticky="nw")
@@ -1486,7 +1479,6 @@ def launch_main_window_berimond(parent=None):
     def buy_parapets_loop(times): 
         for i in range(times): 
             try: 
-                # Usamos wait_and_click con tiempo de espera 
                 if not wait_and_click("assets/eventos/berimond/buy_mantlet.png", confidence=0.85, timeout=5): 
                     log("❌ No se encontró parapeto_icon.png") 
                     return 
@@ -1513,7 +1505,7 @@ def launch_main_window_berimond(parent=None):
         threading.Thread(target=buy_parapets_loop, args=(times,), daemon=True).start()
 
     # -------------------------
-    # 🪵 Parapetos (fila 2, col 2 al lado del log)
+    # 🪵 Parapetos 
     # -------------------------
     parapet_frame = ttk.Labelframe(root, text="Comprador de Parapetos", padding=10, bootstyle="secondary")
     parapet_frame.grid(row=2, column=2, padx=10, pady=8, sticky="n")
@@ -1609,7 +1601,6 @@ def launch_main_window_berimond(parent=None):
             log(f"⚠️ Valores inválidos en el ciclo: {e}")
             return
 
-        # Tropas para enviar
         USER_SEND_TROOP = combo_send_troop.get() if combo_send_troop else ""
         USER_RECRUIT_TROOP = combo_troop.get() if combo_troop else ""
 
@@ -1773,21 +1764,18 @@ def launch_main_window_berimond(parent=None):
 
     root.protocol("WM_DELETE_WINDOW", on_close)
 
-    # Make grid expand nicely
     root.grid_columnconfigure(1, weight=1)
     root.grid_columnconfigure(2, weight=1)
     log_frame.grid_rowconfigure(0, weight=1)
     log_frame.grid_columnconfigure(0, weight=1)
 
-    # Mostrar ventana
     root.update_idletasks()
     root.deiconify()
-
-
 
 # -------------------- UI: main window --------------------
 global ultimo_log_ciclos
 ultimo_log_ciclos = None
+
 def launch_main_window():
     global root, combo_camps, spin_comandantes, spin_timer, combo_comandante
     global entry_delay, text_log, label_status, comandante_delays
@@ -2096,9 +2084,8 @@ last_click_time = {}
 COOLDOWN = 1  # segundo
 last_popup_time = 0
 
-
 def watcher_popups_templates():
-    global last_click_time, POPUP_ACTIVE, last_popup_time
+    global last_click_time, POPUP_ACTIVE, last_popup_time, disabled_popups
     while WATCHER_ACTIVE:
         screenshot = pyautogui.screenshot()
         screen_gray = cv2.cvtColor(np.array(screenshot), cv2.COLOR_RGB2GRAY)
@@ -2109,6 +2096,10 @@ def watcher_popups_templates():
         for name, template in offer_templates.items():
             if template is None:
                 continue
+            # 🚫 Saltar si está en la blacklist
+            if name in disabled_popups:
+                continue
+            # cooldown para evitar spam
             if current_time - last_click_time.get(name, 0) < COOLDOWN:
                 continue
 
@@ -2134,6 +2125,7 @@ def watcher_popups_templates():
                 POPUP_ACTIVE = False
 
         t.sleep(0.1)
+
 
 
 def is_cooldown_locked(camp_id):
@@ -2191,7 +2183,6 @@ def watcher_fire_fast():
             log(f"⚠️ Error en watcher_fire_fast con campamento ({target_camp.x},{target_camp.y}): {e}")
 
         time.sleep(0.1)
-
 
 # ---------- Attack cycle ----------
 def ciclo_ataques(target: Detection, ciclos_max):
@@ -2255,7 +2246,6 @@ def ciclo_ataques(target: Detection, ciclos_max):
 
     RUNNING = False
     log("⏹ Todos los ciclos completados o se detuvo la ejecución")
-
 
 # -------------------- Seleccionador de Facciones --------------------
 def choose_faction_window():
