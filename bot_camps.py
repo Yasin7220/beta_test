@@ -1608,7 +1608,6 @@ def launch_main_window_berimond(parent=None):
                 log("💾 Configuración Berimond cargada")
             except Exception as e:
                 log(f"⚠️ Error cargando configuración: {e}")
-    cargar_config()
     # -------------------------
     # Botones Iniciar / Detener ciclo
     # -------------------------
