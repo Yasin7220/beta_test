@@ -86,8 +86,8 @@ TROOP_IMAGES = {
     "Arquero veterano": "assets/recruit/veteran_bowman.png",
     "Guerrero con maza veterano": "assets/recruit/veteran_maceman.png",
     "Piquero veterano": "assets/recruit/veteran_spearman.png",
-    "Auxiliar A": "assets/recruit/auxiliar_melee.png",
-    "Auxiliar B": "assets/recruit/auxiliar_ranged.png",
+    "Musculitos": "assets/recruit/auxiliar_melee.png",
+    "Tirador": "assets/recruit/auxiliar_ranged.png",
 }
 TROOP_IMAGES_ORIGINAL = {
     "Valquiria de asalto": "assets/recruit/originals/valkyrie_rangerO.png",
