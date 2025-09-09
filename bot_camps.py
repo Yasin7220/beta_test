@@ -203,7 +203,6 @@ class Coord:
     y: int
     w: int
     h: int
-
 with open(COORDS_FILE, "r") as f:
     COORDS = json.load(f)
     
@@ -221,32 +220,43 @@ else:
 
 # ---------- Utilities ----------
 def safe_imread(path):
-    img = cv2.imread(path, cv2.IMREAD_GRAYSCALE)
+    # Convertir a str absoluta para evitar problemas de tipo
+    path_str = str(path)
+    if not os.path.exists(path_str):
+        messagebox.showerror("Error", f"No se encontró la imagen: {path_str}")
+        return None
+    img = cv2.imread(path_str, cv2.IMREAD_GRAYSCALE)
     if img is None:
-        messagebox.showerror("Error", f"No se pudo leer la imagen: {path}")
+        messagebox.showerror("Error", f"No se pudo leer la imagen con OpenCV: {path_str}")
     return img
 
-def detect_on_screen(template_path, confidence=THRESHOLD):
+def detect_on_screen(template_input, confidence=THRESHOLD):
     screenshot = pyautogui.screenshot()
-    screen_rgb = np.array(screenshot)
-    screen_gray = cv2.cvtColor(screen_rgb, cv2.COLOR_RGB2GRAY)
-    template = safe_imread(template_path)
-    if template is None:
+    screen_gray = cv2.cvtColor(np.array(screenshot), cv2.COLOR_RGB2GRAY)
+
+    # --- Cargar plantilla ---
+    if isinstance(template_input, str):
+        template = safe_imread(template_input)
+        if template is None:
+            log(f"❌ detect_on_screen: plantilla inválida {template_input}")
+            return None
+    elif isinstance(template_input, np.ndarray):
+        template = template_input
+    else:
+        log(f"❌ detect_on_screen recibió tipo inválido: {type(template_input)}")
         return None
+
+    # --- Matching ---
     res = cv2.matchTemplate(screen_gray, template, cv2.TM_CCOEFF_NORMED)
     _, max_val, _, max_loc = cv2.minMaxLoc(res)
     if max_val >= confidence:
         h, w = template.shape
         x, y = max_loc
-
-        cv2.rectangle(screen_rgb, (x, y), (x + w, y + h), (0, 255, 0), 2)
-
-        cv2.imwrite(
-            os.path.join(CAPTURE_DIR, f"{os.path.basename(template_path).split('.')[0]}.png"),
-            cv2.cvtColor(screen_rgb, cv2.COLOR_RGB2BGR),
-        )
         return Coord(x=x + w//2, y=y + h//2, w=w, h=h)
     return None
+
+
+
 
 # ---------- GUI ----------
 def capture_coord(name):
@@ -1064,8 +1074,10 @@ def recruit_troops(subtipo):
     tipo_general = TROOP_TYPES.get(subtipo)
     imagen = TROOP_IMAGES.get(subtipo)
     if not tipo_general or not imagen:
-        log(f"⚠️ Tropas desconocidas: {subtipo}")
+        log(f"⚠️ Tropas desconocidas o ruta vacía: '{subtipo}' -> {imagen}")
         return
+    else:
+        log(f"🔍 Intentando leer imagen: {imagen}")
 
     log(f"⚔️ Reclutando {subtipo} ({tipo_general})...")
 
@@ -1081,7 +1093,7 @@ def recruit_troops(subtipo):
         for attempt in range(5):
             result = detect_on_screen(imagen)
             if result:
-                wait_and_click(result.x, result.y)  # seleccionar tropa
+                pyautogui.click(result.x, result.y)  # ✅ clic directo en coords detectadas
                 found = True
                 break
             wait_and_click("assets/recruit/left_arrow.png")
@@ -1091,7 +1103,7 @@ def recruit_troops(subtipo):
             for attempt in range(5):
                 result = detect_on_screen(imagen)
                 if result:
-                    wait_and_click(result.x, result.y)  # seleccionar tropa
+                    pyautogui.click(result.x, result.y)  # ✅ clic directo en coords detectadas
                     found = True
                     break
                 wait_and_click("assets/recruit/right_arrow.png")
@@ -1100,7 +1112,7 @@ def recruit_troops(subtipo):
         if not found:
             log(f"❌ No se pudo encontrar {subtipo}")
             return
-
+        t.sleep(2)
         # Detectar botón "reclutar"
         recruit_btn = detect_on_screen("assets/recruit/recruit.png")
         if not recruit_btn:
@@ -1121,6 +1133,7 @@ def recruit_troops(subtipo):
 
     except Exception as e:
         log(f"❌ Error en reclutamiento: {e}")
+
 
 def click_coord(coord: dict):
     x, y = coord["x"], coord["y"]
@@ -1570,12 +1583,22 @@ def launch_main_window_berimond(parent=None):
                 spin_parapets.delete(0, "end")
                 spin_parapets.insert(0, cfg.get("PARAPETS_COUNT", 200))
                 horse_var.set(cfg.get("HORSE_CHOICE", "monedas"))
-                if cfg.get("SELECTED_RECRUIT_TROOP") in combo_troop["values"]:
-                    combo_troop.set(cfg["SELECTED_RECRUIT_TROOP"])
-                    update_troop_image(cfg["SELECTED_RECRUIT_TROOP"])
-                if cfg.get("SELECTED_SEND_TROOP") in combo_send_troop["values"]:
-                    combo_send_troop.set(cfg["SELECTED_SEND_TROOP"])
-                    update_send_troop_image(cfg["SELECTED_SEND_TROOP"])
+                
+                troop_name = cfg.get("SELECTED_RECRUIT_TROOP")
+                if troop_name in TROOP_TYPES:
+                    troop_type = TROOP_TYPES[troop_name]
+                    update_troop_list(troop_type)  # actualiza combo según tipo
+                    combo_troop.set(troop_name)
+                    update_troop_image(troop_name)
+
+                # Tropas de envío
+                send_name = cfg.get("SELECTED_SEND_TROOP")
+                if send_name in combo_send_troop["values"]:
+                    combo_send_troop.set(send_name)
+                    update_send_troop_image(send_name)
+
+                    
+                    
                 if "THEME" in cfg:
                     saved_theme = cfg["THEME"]
                     if saved_theme in root.style.theme_names():
@@ -1585,7 +1608,7 @@ def launch_main_window_berimond(parent=None):
                 log("💾 Configuración Berimond cargada")
             except Exception as e:
                 log(f"⚠️ Error cargando configuración: {e}")
-
+    cargar_config()
     # -------------------------
     # Botones Iniciar / Detener ciclo
     # -------------------------
@@ -1637,18 +1660,23 @@ def launch_main_window_berimond(parent=None):
     image_label.grid(row=1, column=1, pady=8)
 
     def update_troop_list(tipo):
+        """Actualiza la lista de tropas según el tipo (cuerpo/distancia)"""
         current_type.set(tipo)
         troops = [t for t, ttype in TROOP_TYPES.items() if ttype == tipo]
         combo_troop["values"] = troops
         if troops:
-            combo_troop.current(0)
-            update_troop_image(troops[0])
+            if combo_troop.get() not in troops:
+                combo_troop.current(0)
+                update_troop_image(troops[0])
         else:
             combo_troop.set("")
             image_label.configure(image="")
 
     def update_troop_image(troop_name):
+        """Actualiza la imagen de la tropa seleccionada"""
         path = TROOP_IMAGES_ORIGINAL.get(troop_name) if 'TROOP_IMAGES_ORIGINAL' in globals() else TROOP_IMAGES.get(troop_name)
+        if path:
+            path = os.path.abspath(path)
         if path and os.path.exists(path):
             try:
                 img = Image.open(path)
@@ -1667,8 +1695,7 @@ def launch_main_window_berimond(parent=None):
     combo_troop.bind("<<ComboboxSelected>>", lambda e: update_troop_image(combo_troop.get()))
     ttk.Button(recruit_frame, text="⚔️ Melee", bootstyle="info-outline", command=lambda: update_troop_list("cuerpo")).grid(row=0, column=0, padx=4)
     ttk.Button(recruit_frame, text="🏹 Ranged", bootstyle="info-outline", command=lambda: update_troop_list("distancia")).grid(row=0, column=2, padx=4)
-    update_troop_list("cuerpo")
-
+    combo_troop["values"] = []
     def recruit_selected():
         tropa = combo_troop.get()
         if not tropa:
