@@ -109,8 +109,8 @@ TROOP_IMAGES_ORIGINAL = {
     "Arquero veterano": "assets/recruit/originals/veteran_bowmanO.png",
     "Guerrero con maza veterano": "assets/recruit/originals/veteran_macemanO.png",
     "Piquero veterano": "assets/recruit/originals/veteran_spearmanO.png",
-    "Auxiliar A": "assets/recruit/originals/auxiliar_meleeO.png",
-    "Auxiliar B": "assets/recruit/originals/auxiliar_rangedO.png"
+    "Musculitos": "assets/recruit/originals/auxiliar_meleeO.png",
+    "Tirador": "assets/recruit/originals/auxiliar_rangedO.png"
 }
 TROOP_TYPES = {
     "Valquiria de asalto": "distancia",
@@ -131,8 +131,8 @@ TROOP_TYPES = {
     "Arquero veterano": "distancia",
     "Guerrero con maza veterano": "cuerpo",
     "Piquero veterano": "cuerpo",
-    "Auxiliar A": "cuerpo",
-    "Auxiliar B": "distancia"
+    "Musculitos": "cuerpo",
+    "Tirador": "distancia"
 }
 
 FILE_TO_TROOP = {
@@ -154,8 +154,8 @@ FILE_TO_TROOP = {
     "veteran_bowman": "Arquero veterano",
     "veteran_maceman": "Guerrero con maza veterano",
     "veteran_spearman": "Piquero veterano",
-    "auxiliar_melee": "Auxiliar A",
-    "auxiliar_ranged": "Auxiliar B"
+    "auxiliar_melee": "Musculitos",
+    "auxiliar_ranged": "Tirador"
 }
 
 BERIMOND_TROOPS = {
@@ -489,6 +489,7 @@ def load_templates():
         "offer3": "assets/popups/offer3.png",
         "offer4": "assets/popups/offer4.png",
         "reward2": "assets/popups/reward2.png",
+        "beri_reward": "assets/popups/beri_reward.png"
     }
 
     for key, path in offer_paths.items():
@@ -1123,7 +1124,7 @@ def recruit_troops(subtipo):
         t.sleep(1.5)  # espera para que la UI procese
 
         # Pasos finales
-        for step in ["alliance_help", "exit_menu_barracks", "exit_castle"]:
+        for step in ["exit_menu_barracks", "exit_castle", "berimond_watchtower_location"]:
             wait_and_click(f"assets/recruit/{step}.png")
             t.sleep(0.2)
 
