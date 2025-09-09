@@ -1111,14 +1111,13 @@ def recruit_troops(subtipo):
 
         if not found:
             log(f"❌ No se pudo encontrar {subtipo}")
-            return
-        t.sleep(2)
+ 
         # Detectar botón "reclutar"
         recruit_btn = detect_on_screen("assets/recruit/recruit.png")
         if not recruit_btn:
             log("❌ Botón Reclutar no encontrado")
             return
-
+        t.sleep(3)
         # Clic en el botón una sola vez
         pyautogui.click(recruit_btn.x, recruit_btn.y)
         log(f"➡️ Reclutando {subtipo} (1 vez)")
