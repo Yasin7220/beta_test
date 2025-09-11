@@ -18,6 +18,7 @@ from ttkbootstrap.widgets import Spinbox
 from tkinter import StringVar
 import time as t  
 from datetime import datetime, time 
+import sys
 # ---------- Config ----------
 FACTION: Optional[str] = None
 
@@ -55,7 +56,7 @@ templates = {}
 offer_templates = {}
 comandante_delays = {}
 disabled_popups = set()
-horse_choice = "monedas"  # por defecto
+horse_choice = "monedas"
 # GUI references
 root = None
 combo_camps = None
@@ -188,7 +189,9 @@ TEMPLATE_PATHS = {
     "arrow_left" :"assets/cooldown/arrow_left.png",
     "clock_30": "assets/cooldown/clock_30m.png",
     "clock_1h_bonus": "assets/cooldown/clock_1h_bonus.png",
-    "clock_30m_bonus": "assets/cooldown/clock_30m_bonus.png"
+    "clock_30m_bonus": "assets/cooldown/clock_30m_bonus.png",
+    "recruit_icon": "assets/recruit/recruit_icon.png",
+    "recruit": "assets/recruit/recruit.png"
 }
 
 OUTPUT_JSON = "berimond_ui_coords.json"
@@ -1075,25 +1078,30 @@ def recruit_troops(subtipo):
     imagen = TROOP_IMAGES.get(subtipo)
     if not tipo_general or not imagen:
         log(f"⚠️ Tropas desconocidas o ruta vacía: '{subtipo}' -> {imagen}")
-        return
-    else:
-        log(f"🔍 Intentando leer imagen: {imagen}")
+        sys.exit(f"❌ Bot detenido: tipo de tropa desconocido {subtipo}")
 
+    log(f"🔍 Intentando leer imagen: {imagen}")
     log(f"⚔️ Reclutando {subtipo} ({tipo_general})...")
 
     try:
-        # Abrir castillo y barracones
-        wait_and_click("assets/recruit/castle_icon.png")
-        t.sleep(0.2)
-        wait_and_click("assets/recruit/recruit_icon.png")
-        t.sleep(0.2)
+        # --- Abrir castillo ---
+        if not wait_and_click("assets/recruit/castle_icon.png", timeout=5):
+            sys.exit("❌ Bot detenido: no se encontró el icono del castillo")
+        t.sleep(2)
 
-        # Buscar y seleccionar tropa
+        # --- Abrir barracones con coordenadas ---
+        if "recruit_icon" in COORDS:
+            click_coord(COORDS["recruit_icon"])
+            t.sleep(1)
+        else:
+            sys.exit("❌ Bot detenido: coordenadas de recruit_icon no encontradas")
+
+        # --- Buscar y seleccionar tropa ---
         found = False
         for attempt in range(5):
             result = detect_on_screen(imagen)
             if result:
-                pyautogui.click(result.x, result.y)  # ✅ clic directo en coords detectadas
+                pyautogui.click(result.x, result.y)
                 found = True
                 break
             wait_and_click("assets/recruit/left_arrow.png")
@@ -1103,35 +1111,35 @@ def recruit_troops(subtipo):
             for attempt in range(5):
                 result = detect_on_screen(imagen)
                 if result:
-                    pyautogui.click(result.x, result.y)  # ✅ clic directo en coords detectadas
+                    pyautogui.click(result.x, result.y)
                     found = True
                     break
                 wait_and_click("assets/recruit/right_arrow.png")
                 t.sleep(0.2)
 
         if not found:
-            log(f"❌ No se pudo encontrar {subtipo}")
- 
-        # Detectar botón "reclutar"
-        recruit_btn = detect_on_screen("assets/recruit/recruit.png")
-        if not recruit_btn:
-            log("❌ Botón Reclutar no encontrado")
-            return
-        t.sleep(3)
-        # Clic en el botón una sola vez
-        pyautogui.click(recruit_btn.x, recruit_btn.y)
-        log(f"➡️ Reclutando {subtipo} (1 vez)")
-        t.sleep(1.5)  # espera para que la UI procese
+            sys.exit(f"❌ Bot detenido: no se pudo encontrar {subtipo}")
 
-        # Pasos finales
+        # --- Botón Reclutar con coordenadas ---
+        if "recruit" in COORDS:
+            log("⏳ Esperando 3 segundos antes de confirmar reclutamiento...")
+            t.sleep(3)
+            click_coord(COORDS["recruit"])
+            log(f"➡️ Reclutando {subtipo} (1 vez)")
+            t.sleep(1.5)
+        else:
+            sys.exit("❌ Bot detenido: coordenadas de recruit no encontradas")
+
+        # --- Pasos finales ---
         for step in ["exit_menu_barracks", "exit_castle", "berimond_watchtower_location"]:
-            wait_and_click(f"assets/recruit/{step}.png")
+            if not wait_and_click(f"assets/recruit/{step}.png", timeout=5):
+                sys.exit(f"❌ Bot detenido: no se pudo completar el paso {step}")
             t.sleep(0.2)
 
         log(f"✅ Reclutamiento de {subtipo} completado")
 
     except Exception as e:
-        log(f"❌ Error en reclutamiento: {e}")
+        sys.exit(f"❌ Bot detenido por error inesperado: {e}")
 
 
 def click_coord(coord: dict):
@@ -1160,7 +1168,7 @@ def attack_berimond():
 
         if "confirm_attack" in COORDS:
             click_coord(COORDS["confirm_attack"])
-            t.sleep(0.5)
+            t.sleep(0.6)
 
         if "template_button" in COORDS:
             click_coord(COORDS["template_button"])
@@ -1174,20 +1182,20 @@ def attack_berimond():
             log("❌ Error: No hay suficientes tropas para atacar")
             wait_and_click("assets/attack/error_close.png")
             wait_and_click("assets/attack/exit2.png")
-            return False
+            sys.exit()
 
         # --- Selección del caballo por COORDS ---
         if horse_choice == "monedas":
             if "horse_gold_coins" in COORDS:
                 click_coord(COORDS["horse_gold_coins"])
-                t.sleep(0.2)
+                t.sleep(0.01)
             else:
                 log("❌ Coordenadas de caballo monedas no encontradas en COORDS")
                 return False
         elif horse_choice == "plumas":
             if "horse_premium" in COORDS:
                 click_coord(COORDS["horse_premium"])
-                t.sleep(0.2)
+                t.sleep(0.01)
             else:
                 log("❌ Coordenadas de caballo premium no encontradas en COORDS")
                 return False
@@ -1195,7 +1203,7 @@ def attack_berimond():
         # --- Confirmar ataque por COORDS ---
         if "confirm_attack2" in COORDS:
             click_coord(COORDS["confirm_attack2"])
-            t.sleep(0.2)
+            t.sleep(0.01)
         else:
             log("❌ Coordenadas de confirm_attack2 no encontradas en COORDS")
             return False
@@ -1203,7 +1211,7 @@ def attack_berimond():
         # Sincronización mínima
         elapsed = t.time() - start_time
         if elapsed < 4.01:
-            t.sleep(4.01 - elapsed)
+            t.sleep(4.05 - elapsed)
             elapsed = t.time() - start_time
 
         log(f"✅ Ataque completado con caballo {horse_choice} en {elapsed:.2f} segundos")
@@ -1212,7 +1220,6 @@ def attack_berimond():
     finally:
         # ✅ Rehabilitar reward_beri después del ataque
         disabled_popups.discard("beri_reward")
-
 
 
 def click_with_offset(pos, offset_x=0, offset_y=0):
@@ -1276,8 +1283,8 @@ def send_troops_to_berimond_kingdom(troop_name: str):
             (base_path + "clock_1h.png", {"desc": "Usar reloj de 1 hora", "offset_x": 100, "sleep": 0.3}),
             (base_path + "clock_1h.png", {"desc": "Usar reloj de 1 hora (2do clic)", "offset_x": 100, "sleep": 0.3}),
             (base_path + "enter_kingdom.png", {"desc": "Entrar al reino Berimond"}),
-            (base_path + "exit_castle.png", {"desc": "Salir del castillo"}),
-            (base_path + "berimond_watchtower_location.png", {"desc": "Centrar en la torre de vigilancia"}),
+            (base_path + "exit_castle.png", {"desc": "Salir del campamento"}),
+            (base_path + "berimond_watchtower_location.png", {"desc": "Centrar en la torre vigía"}),
         ]
 
         for img, opts in final_steps:
